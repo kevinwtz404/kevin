@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kevin's Soundboard</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background-image: url('background.jpg');
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+
+        .soundboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .sound-button {
+            width: 80px;
+            height: 80px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sound-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .sound-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Different colors for each button */
+        .button-1 { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
+        .button-2 { background: linear-gradient(135deg, #4ecdc4, #44bd87); }
+        .button-3 { background: linear-gradient(135deg, #45b7d1, #2c5aa0); }
+        .button-4 { background: linear-gradient(135deg, #f9ca24, #f0932b); }
+        .button-5 { background: linear-gradient(135deg, #6c5ce7, #a55eea); }
+        .button-6 { background: linear-gradient(135deg, #fd79a8, #e84393); }
+        .button-7 { background: linear-gradient(135deg, #00b894, #00cec9); }
+        .button-8 { background: linear-gradient(135deg, #fdcb6e, #e17055); }
+        .button-9 { background: linear-gradient(135deg, #81ecec, #74b9ff); }
+    </style>
+</head>
+<body>
+    <div class="soundboard">
+        <button class="sound-button button-1" onclick="playSound(1)">1</button>
+        <button class="sound-button button-2" onclick="playSound(2)">2</button>
+        <button class="sound-button button-3" onclick="playSound(3)">3</button>
+        <button class="sound-button button-4" onclick="playSound(4)">4</button>
+        <button class="sound-button button-5" onclick="playSound(5)">5</button>
+        <button class="sound-button button-6" onclick="playSound(6)">6</button>
+        <button class="sound-button button-7" onclick="playSound(7)">7</button>
+        <button class="sound-button button-8" onclick="playSound(8)">8</button>
+        <button class="sound-button button-9" onclick="playSound(9)">9</button>
+    </div>
+
+    <script>
+        let audioContext;
+        let isPlaying = false;
+        
+        function playSound(soundNumber) {
+            const audio = new Audio(`sounds/${soundNumber}.m4a`);
+            audio.volume = 0.8; // Button sounds slightly louder
+            audio.play().catch(error => {
+                console.error('Error playing sound:', error);
+            });
+        }
+
+        // Background beat using Web Audio API
+        function startBackgroundBeat() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            if (isPlaying) return;
+            isPlaying = true;
+            
+            const bpm = 120;
+            const beatLength = 60 / bpm; // seconds per beat
+            const patternLength = beatLength * 16; // 16 beats (4 bars) per pattern
+            
+            function createKick(when) {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(55, when);
+                oscillator.frequency.exponentialRampToValueAtTime(0.01, when + 0.15);
+                
+                gainNode.gain.setValueAtTime(0.3, when);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, when + 0.4);
+                
+                oscillator.start(when);
+                oscillator.stop(when + 0.4);
+            }
+            
+            function createHiHat(when, accent = false) {
+                const bufferSize = audioContext.sampleRate * 0.08;
+                const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+                const output = buffer.getChannelData(0);
+                
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+                }
+                
+                const noise = audioContext.createBufferSource();
+                const gainNode = audioContext.createGain();
+                const filter = audioContext.createBiquadFilter();
+                
+                noise.buffer = buffer;
+                noise.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                filter.type = 'highpass';
+                filter.frequency.value = 7000;
+                
+                const volume = accent ? 0.18 : 0.10;
+                gainNode.gain.setValueAtTime(volume, when);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, when + 0.08);
+                
+                noise.start(when);
+            }
+            
+            let startTime = audioContext.currentTime;
+            let currentBar = 0;
+            
+            function scheduleNextPattern() {
+                const now = audioContext.currentTime;
+                const scheduleAhead = now + 0.1;
+                
+                // 16-beat pattern (4 bars)
+                for (let beat = 0; beat < 16; beat++) {
+                    const when = startTime + (currentBar * patternLength) + (beat * beatLength);
+                    
+                    if (when < scheduleAhead) continue;
+                    
+                    // Kick pattern: beats 0, 4, 8, 12 (every 4th beat)
+                    if (beat % 4 === 0) {
+                        createKick(when);
+                    }
+                    
+                    // Hi-hat pattern: more complex
+                    if (beat % 2 === 1) { // Off-beats
+                        createHiHat(when, beat % 8 === 3); // Accent every 8th beat
+                    }
+                    if ((beat + 1) % 4 === 0 && beat !== 15) { // Extra hi-hats
+                        createHiHat(when + beatLength * 0.25, false);
+                    }
+                }
+                
+                currentBar++;
+                setTimeout(scheduleNextPattern, patternLength * 1000 * 0.9);
+            }
+            
+            scheduleNextPattern();
+        }
+
+        // Start background beat when user interacts with page
+        function initAudio() {
+            startBackgroundBeat();
+            document.removeEventListener('click', initAudio);
+        }
+
+        // Preload all sounds for better performance
+        window.addEventListener('load', function() {
+            for (let i = 1; i <= 9; i++) {
+                const audio = new Audio(`sounds/${i}.m4a`);
+                audio.preload = 'auto';
+            }
+            
+            // Start beat on first click (browsers require user interaction for audio)
+            document.addEventListener('click', initAudio);
+        });
+    </script>
+</body>
+</html>
